@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  USER
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+model Tenant {
+  id             String               @id @default(uuid())
+  name           String
+  ice            String?
+  logoUrl        String?
+  phone          String?
+  address        String?
+  city           String?
+  email          String?
+  legalMentions  String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  deletedAt      DateTime?
+
+  users          User[]
+  clients        Client[]
+  quotes         Quote[]
+  invoices       Invoice[]
+  cheques        Cheque[]
+  subscription   BillingSubscription?
+}
+
+model User {
+  id                     String    @id @default(uuid())
+  tenantId               String
+  tenant                 Tenant    @relation(fields: [tenantId], references: [id])
+  email                  String    @unique
+  passwordHash           String
+  fullName               String
+  role                   UserRole
+  isActive               Boolean   @default(true)
+  refreshTokenHash       String?
+  passwordResetToken     String?
+  passwordResetExpiresAt DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  deletedAt              DateTime?
+
+  @@index([tenantId])
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  ice       String?
+  email     String?
+  phone     String?
+  address   String?
+  city      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  quotes    Quote[]
+  invoices  Invoice[]
+  cheques   Cheque[]
+
+  @@index([tenantId])
+}
+
+model Quote {
+  id        String     @id @default(uuid())
+  tenantId  String
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  clientId  String?
+  client    Client?    @relation(fields: [clientId], references: [id])
+  number    String
+  status    String?
+  subtotal  Decimal    @db.Decimal(12, 2)
+  taxAmount Decimal    @db.Decimal(12, 2)
+  total     Decimal    @db.Decimal(12, 2)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  deletedAt DateTime?
+
+  items     QuoteLine[]
+
+  @@index([tenantId])
+  @@index([clientId])
+}
+
+model QuoteLine {
+  id        String   @id @default(uuid())
+  quoteId   String
+  quote     Quote    @relation(fields: [quoteId], references: [id])
+  label     String
+  quantity  Int
+  unitPrice Decimal  @db.Decimal(12, 2)
+  lineTotal Decimal  @db.Decimal(12, 2)
+}
+
+model Invoice {
+  id        String       @id @default(uuid())
+  tenantId  String
+  tenant    Tenant       @relation(fields: [tenantId], references: [id])
+  clientId  String?
+  client    Client?      @relation(fields: [clientId], references: [id])
+  title     String?
+  note      String?
+  paymentMethod String?
+  invoiceDate DateTime?
+  dueDate   DateTime?
+  number    String
+  status    String?
+  subtotal  Decimal      @db.Decimal(12, 2)
+  taxAmount Decimal      @db.Decimal(12, 2)
+  total     Decimal      @db.Decimal(12, 2)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  deletedAt DateTime?
+
+  items     InvoiceLine[]
+
+  @@index([tenantId])
+  @@index([clientId])
+}
+
+model InvoiceLine {
+  id        String   @id @default(uuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  label     String
+  quantity  Int
+  unitPrice Decimal  @db.Decimal(12, 2)
+  lineTotal Decimal  @db.Decimal(12, 2)
+}
+
+model Cheque {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id])
+  amount    Decimal  @db.Decimal(12, 2)
+  status    String?
+  dueDate   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  @@index([tenantId])
+  @@index([clientId])
+}
+
+model BillingSubscription {
+  id               String              @id @default(uuid())
+  tenantId         String              @unique
+  tenant           Tenant              @relation(fields: [tenantId], references: [id])
+  plan             String
+  status           SubscriptionStatus
+  currentPeriodEnd DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+}
