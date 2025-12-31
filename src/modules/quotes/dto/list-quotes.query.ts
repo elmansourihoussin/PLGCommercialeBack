@@ -1,14 +1,18 @@
 import { IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
-export class ListChequesQueryDto {
+export class ListQuotesQueryDto {
   @IsOptional()
   @IsString()
-  status?: string;
+  search?: string;
 
   @IsOptional()
   @IsString()
   clientId?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
 
   @IsOptional()
   @Type(() => Number)

@@ -44,7 +44,7 @@ export class CreateInvoiceDto {
 
   @IsOptional()
   @Type(() => Number)
-  taxRate?: number;
+  defaultTaxRate?: number;
 
   @IsArray()
   @ValidateNested({ each: true })

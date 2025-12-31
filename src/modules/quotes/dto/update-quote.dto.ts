@@ -6,9 +6,9 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
-import { InvoiceLineDto } from './invoice-line.dto';
+import { QuoteLineDto } from './quote-line.dto';
 
-export class UpdateInvoiceDto {
+export class UpdateQuoteDto {
   @IsOptional()
   @IsString()
   clientId?: string;
@@ -35,7 +35,7 @@ export class UpdateInvoiceDto {
 
   @IsOptional()
   @IsDateString()
-  invoiceDate?: string;
+  quoteDate?: string;
 
   @IsOptional()
   @IsDateString()
@@ -48,6 +48,6 @@ export class UpdateInvoiceDto {
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => InvoiceLineDto)
-  items?: InvoiceLineDto[];
+  @Type(() => QuoteLineDto)
+  items?: QuoteLineDto[];
 }

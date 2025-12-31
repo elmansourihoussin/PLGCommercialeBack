@@ -10,6 +10,7 @@ import { QuotesModule } from './modules/quotes/quotes.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { ChequesModule } from './modules/cheques/cheques.module';
+import { ArticlesModule } from './modules/articles/articles.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ChequesModule } from './modules/cheques/cheques.module';
     QuotesModule,
     InvoicesModule,
     ChequesModule,
+    ArticlesModule,
     BillingModule,
     DashboardModule,
   ],

@@ -7,6 +7,7 @@ import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ListInvoicesQueryDto } from './dto/list-invoices.query';
+import { CreateInvoicePaymentDto } from './dto/create-invoice-payment.dto';
 
 @ApiTags('Invoices')
 @ApiBearerAuth()
@@ -47,5 +48,28 @@ export class InvoicesController {
   @Delete(':id')
   remove(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.invoicesService.remove(tenantId, id);
+  }
+
+  @Get(':id/payments')
+  listPayments(@TenantId() tenantId: string, @Param('id') id: string) {
+    return this.invoicesService.listPayments(tenantId, id);
+  }
+
+  @Post(':id/payments')
+  addPayment(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: CreateInvoicePaymentDto,
+  ) {
+    return this.invoicesService.addPayment(tenantId, id, dto);
+  }
+
+  @Delete(':id/payments/:paymentId')
+  removePayment(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+  ) {
+    return this.invoicesService.removePayment(tenantId, id, paymentId);
   }
 }

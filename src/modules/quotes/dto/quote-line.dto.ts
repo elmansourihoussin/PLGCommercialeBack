@@ -1,7 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
-export class InvoiceLineDto {
+export class QuoteLineDto {
   @IsString()
   @IsNotEmpty()
   label: string;

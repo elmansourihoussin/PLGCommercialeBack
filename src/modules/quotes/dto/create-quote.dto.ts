@@ -2,13 +2,14 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
+  IsNotEmpty,
   IsOptional,
   IsString,
   ValidateNested,
 } from 'class-validator';
-import { InvoiceLineDto } from './invoice-line.dto';
+import { QuoteLineDto } from './quote-line.dto';
 
-export class UpdateInvoiceDto {
+export class CreateQuoteDto {
   @IsOptional()
   @IsString()
   clientId?: string;
@@ -35,7 +36,7 @@ export class UpdateInvoiceDto {
 
   @IsOptional()
   @IsDateString()
-  invoiceDate?: string;
+  quoteDate?: string;
 
   @IsOptional()
   @IsDateString()
@@ -45,9 +46,9 @@ export class UpdateInvoiceDto {
   @Type(() => Number)
   defaultTaxRate?: number;
 
-  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => InvoiceLineDto)
-  items?: InvoiceLineDto[];
+  @Type(() => QuoteLineDto)
+  @IsNotEmpty()
+  items: QuoteLineDto[];
 }

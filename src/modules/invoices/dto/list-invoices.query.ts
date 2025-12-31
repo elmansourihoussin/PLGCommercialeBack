@@ -8,6 +8,10 @@ export class ListInvoicesQueryDto {
 
   @IsOptional()
   @IsString()
+  clientId?: string;
+
+  @IsOptional()
+  @IsString()
   status?: string;
 
   @IsOptional()

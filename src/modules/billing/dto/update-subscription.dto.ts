@@ -9,4 +9,8 @@ export class UpdateSubscriptionDto {
   @IsOptional()
   @IsEnum(SubscriptionStatus)
   status?: SubscriptionStatus;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }

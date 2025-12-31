@@ -33,11 +33,17 @@ export class ClientsService {
         orderBy: { createdAt: 'desc' },
         skip,
         take,
+        include: {
+          _count: { select: { invoices: true } },
+        },
       }),
     ]);
 
     return {
-      data: items,
+      data: items.map((client) => ({
+        ...client,
+        invoicesCount: client._count.invoices,
+      })),
       meta: buildPaginationMeta(page, limit, total),
     };
   }
@@ -65,6 +71,7 @@ export class ClientsService {
           select: { id: true, number: true, total: true, createdAt: true },
           orderBy: { createdAt: 'desc' },
         },
+        _count: { select: { invoices: true } },
       },
     });
 
@@ -72,7 +79,10 @@ export class ClientsService {
       throw new NotFoundException('Client not found');
     }
 
-    return client;
+    return {
+      ...client,
+      invoicesCount: client._count.invoices,
+    };
   }
 
   async update(tenantId: string, id: string, dto: UpdateClientDto) {

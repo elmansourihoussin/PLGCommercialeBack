@@ -8,6 +8,10 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ListUsersQueryDto } from './dto/list-users.query';
+import { UpdateUserPasswordDto } from './dto/update-user-password.dto';
+import { UpdateUserStatusDto } from './dto/update-user-status.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
+import { UpdateMyPasswordDto } from './dto/update-my-password.dto';
 import { buildPaginationMeta, normalizePagination } from '../../common/pagination/pagination';
 
 @Injectable()
@@ -128,5 +132,112 @@ export class UsersService {
     });
 
     return { success: true };
+  }
+
+  async updatePassword(
+    tenantId: string,
+    id: string,
+    dto: UpdateUserPasswordDto,
+  ) {
+    const user = await this.prisma.user.findFirst({
+      where: { id, tenantId, deletedAt: null },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash },
+    });
+
+    return { success: true };
+  }
+
+  async updateMyPassword(
+    tenantId: string,
+    id: string,
+    dto: UpdateMyPasswordDto,
+  ) {
+    const user = await this.prisma.user.findFirst({
+      where: { id, tenantId, deletedAt: null, isActive: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isMatch = await bcrypt.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+    if (!isMatch) {
+      throw new BadRequestException('Current password is invalid');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash },
+    });
+
+    return { success: true };
+  }
+
+  async updateStatus(tenantId: string, id: string, dto: UpdateUserStatusDto) {
+    const user = await this.prisma.user.findFirst({
+      where: { id, tenantId, deletedAt: null },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { isActive: dto.isActive },
+    });
+
+    return { success: true };
+  }
+
+  async updateMe(tenantId: string, id: string, dto: UpdateMyProfileDto) {
+    const user = await this.prisma.user.findFirst({
+      where: { id, tenantId, deletedAt: null },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (dto.email && dto.email !== user.email) {
+      const existing = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
+      if (existing) {
+        throw new BadRequestException('Email already in use');
+      }
+    }
+
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        fullName: dto.fullName,
+        email: dto.email,
+      },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   }
 }
