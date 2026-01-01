@@ -10,10 +10,15 @@ import { buildPaginationMeta, normalizePagination } from '../../common/paginatio
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { ListQuotesQueryDto } from './dto/list-quotes.query';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '@prisma/client';
 
 @Injectable()
 export class QuotesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async list(tenantId: string, query: ListQuotesQueryDto) {
     const { page, limit, skip, take } = normalizePagination(query);
@@ -108,7 +113,7 @@ export class QuotesService {
   }
 
   async update(tenantId: string, id: string, dto: UpdateQuoteDto) {
-    await this.findOne(tenantId, id);
+    const current = await this.findOne(tenantId, id);
 
     if (dto.clientId) {
       await this.ensureClient(tenantId, dto.clientId);
@@ -146,7 +151,7 @@ export class QuotesService {
       data.total = totals.total;
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       if (shouldUpdateItems) {
         await tx.quoteLine.deleteMany({ where: { quoteId: id } });
         if (dto.items?.length) {
@@ -170,6 +175,10 @@ export class QuotesService {
         },
       });
     });
+
+    await this.notifyQuoteStatus(tenantId, current.status, updated.status, updated.id, updated.number);
+
+    return updated;
   }
 
   async remove(tenantId: string, id: string) {
@@ -261,6 +270,42 @@ export class QuotesService {
 
     if (count !== articleIds.length) {
       throw new BadRequestException('Invalid article reference');
+    }
+  }
+
+  private async notifyQuoteStatus(
+    tenantId: string,
+    previousStatus: string | null,
+    nextStatus: string | null,
+    quoteId: string,
+    quoteNumber: string,
+  ) {
+    if (!nextStatus || nextStatus === previousStatus) {
+      return;
+    }
+
+    if (nextStatus === 'ACCEPTED') {
+      await this.notifications.createSystem(tenantId, {
+        type: NotificationType.QUOTE_ACCEPTED,
+        title: `Devis ${quoteNumber} accepte`,
+        message: `Le devis ${quoteNumber} a ete accepte.`,
+        entityType: 'quote',
+        entityId: quoteId,
+        eventKey: 'accepted',
+        data: { quoteId },
+      });
+    }
+
+    if (nextStatus === 'REJECTED') {
+      await this.notifications.createSystem(tenantId, {
+        type: NotificationType.QUOTE_REJECTED,
+        title: `Devis ${quoteNumber} refuse`,
+        message: `Le devis ${quoteNumber} a ete refuse.`,
+        entityType: 'quote',
+        entityId: quoteId,
+        eventKey: 'rejected',
+        data: { quoteId },
+      });
     }
   }
 }

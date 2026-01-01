@@ -94,6 +94,15 @@ export class AuthService {
         },
       });
 
+      await tx.billingSubscription.create({
+        data: {
+          tenantId: tenant.id,
+          plan: 'FREE',
+          status: 'ACTIVE',
+          currentPeriodEnd: null,
+        },
+      });
+
       return { tenant, user };
     });
 

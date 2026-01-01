@@ -19,6 +19,28 @@ enum SubscriptionStatus {
   CANCELED
 }
 
+enum PlatformRole {
+  ROOT
+  ADMIN
+}
+
+enum NotificationType {
+  INVOICE_DUE_SOON
+  INVOICE_OVERDUE
+  PAYMENT_RECEIVED
+  PAYMENT_PARTIAL
+  QUOTE_ACCEPTED
+  QUOTE_REJECTED
+  QUOTE_EXPIRED
+  STOCK_LOW
+  CHEQUE_DUE
+  CHEQUE_CASHED
+  CHEQUE_REJECTED
+  USER_DEACTIVATED
+  USER_ACTIVATED
+  SUBSCRIPTION_ISSUE
+}
+
 model Tenant {
   id             String               @id @default(uuid())
   name           String
@@ -29,6 +51,7 @@ model Tenant {
   city           String?
   email          String?
   legalMentions  String?
+  isActive       Boolean              @default(true)
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
   deletedAt      DateTime?
@@ -42,6 +65,7 @@ model Tenant {
   articles       Article[]
   billingHistory BillingSubscriptionHistory[]
   subscription   BillingSubscription?
+  notifications  Notification[]
 }
 
 model User {
@@ -60,7 +84,20 @@ model User {
   updatedAt              DateTime  @updatedAt
   deletedAt              DateTime?
 
+  notifications          Notification[]
+
   @@index([tenantId])
+}
+
+model PlatformUser {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  role         PlatformRole
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
 }
 
 model Client {
@@ -251,4 +288,26 @@ model BillingSubscriptionHistory {
   createdAt DateTime @default(now())
 
   @@index([tenantId])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  tenantId  String
+  tenant    Tenant           @relation(fields: [tenantId], references: [id])
+  userId    String?
+  user      User?            @relation(fields: [userId], references: [id])
+  type      NotificationType
+  entityType String?
+  entityId  String?
+  eventKey  String?
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([isRead])
+  @@unique([tenantId, entityType, entityId, eventKey])
 }

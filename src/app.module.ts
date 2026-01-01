@@ -11,10 +11,14 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { ChequesModule } from './modules/cheques/cheques.module';
 import { ArticlesModule } from './modules/articles/articles.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { PlatformModule } from './modules/platform/platform.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     TenantsModule,
@@ -24,6 +28,8 @@ import { ArticlesModule } from './modules/articles/articles.module';
     InvoicesModule,
     ChequesModule,
     ArticlesModule,
+    NotificationsModule,
+    PlatformModule,
     BillingModule,
     DashboardModule,
   ],

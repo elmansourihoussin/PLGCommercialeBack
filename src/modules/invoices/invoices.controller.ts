@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TenantGuard } from '../../common/guards/tenant.guard';
@@ -8,6 +8,7 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ListInvoicesQueryDto } from './dto/list-invoices.query';
 import { CreateInvoicePaymentDto } from './dto/create-invoice-payment.dto';
+import type { Response } from 'express';
 
 @ApiTags('Invoices')
 @ApiBearerAuth()
@@ -34,6 +35,21 @@ export class InvoicesController {
   @Get(':id')
   findOne(@TenantId() tenantId: string, @Param('id') id: string) {
     return this.invoicesService.findOne(tenantId, id);
+  }
+
+  @Get(':id/pdf')
+  async getPdf(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, filename } = await this.invoicesService.generatePdf(
+      tenantId,
+      id,
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=\"${filename}\"`);
+    res.send(buffer);
   }
 
   @Patch(':id')

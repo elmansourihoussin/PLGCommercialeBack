@@ -32,6 +32,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         tenantId: payload.tenantId,
         deletedAt: null,
         isActive: true,
+        tenant: {
+          isActive: true,
+          deletedAt: null,
+        },
       },
     });
 

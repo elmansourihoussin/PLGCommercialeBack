@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { formatSequenceNumber } from '../../common/utils/numbering';
 import { buildPaginationMeta, normalizePagination } from '../../common/pagination/pagination';
@@ -11,10 +11,15 @@ import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ListInvoicesQueryDto } from './dto/list-invoices.query';
 import { CreateInvoicePaymentDto } from './dto/create-invoice-payment.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import puppeteer from 'puppeteer';
 
 @Injectable()
 export class InvoicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async list(tenantId: string, query: ListInvoicesQueryDto) {
     const { page, limit, skip, take } = normalizePagination(query);
@@ -128,6 +133,50 @@ export class InvoicesService {
     );
 
     return this.withPaymentTotals(invoice, paymentTotal);
+  }
+
+  async generatePdf(tenantId: string, id: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id, tenantId, deletedAt: null },
+      include: {
+        items: true,
+        client: true,
+        payments: true,
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: tenantId, deletedAt: null },
+    });
+
+    const paidAmount = invoice.payments.reduce(
+      (sum, payment) => sum + Number(payment.amount),
+      0,
+    );
+
+    const html = buildInvoiceHtml({ invoice, tenant, paidAmount });
+
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const buffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
+    });
+    await browser.close();
+
+    return {
+      buffer,
+      filename: `facture-${invoice.number}.pdf`,
+    };
   }
 
   async update(tenantId: string, id: string, dto: UpdateInvoiceDto) {
@@ -253,7 +302,7 @@ export class InvoicesService {
       throw new BadRequestException('Payment exceeds invoice total');
     }
 
-    return this.prisma.invoicePayment.create({
+    const payment = await this.prisma.invoicePayment.create({
       data: {
         tenantId,
         invoiceId,
@@ -264,6 +313,23 @@ export class InvoicesService {
         note: dto.note,
       },
     });
+
+    const fullyPaid = nextPaid === Number(invoice.total);
+    await this.notifications.createSystem(tenantId, {
+      type: fullyPaid
+        ? NotificationType.PAYMENT_RECEIVED
+        : NotificationType.PAYMENT_PARTIAL,
+      title: fullyPaid ? 'Paiement recu' : 'Paiement partiel recu',
+      message: fullyPaid
+        ? `Paiement total recu pour la facture ${invoice.number}.`
+        : `Paiement partiel recu pour la facture ${invoice.number}.`,
+      entityType: 'invoice',
+      entityId: invoice.id,
+      eventKey: payment.id,
+      data: { invoiceId: invoice.id, paymentId: payment.id, amount: payment.amount },
+    });
+
+    return payment;
   }
 
   async removePayment(tenantId: string, invoiceId: string, paymentId: string) {
@@ -368,3 +434,157 @@ export class InvoicesService {
     }
   }
 }
+
+const formatDate = (date?: Date | null) =>
+  date
+    ? new Intl.DateTimeFormat('fr-FR').format(date)
+    : '-';
+
+const formatMoney = (value: number) =>
+  new Intl.NumberFormat('fr-FR', {
+    style: 'currency',
+    currency: 'MAD',
+  }).format(value);
+
+const buildInvoiceHtml = ({
+  invoice,
+  tenant,
+  paidAmount,
+}: {
+  invoice: any;
+  tenant: any;
+  paidAmount: number;
+}) => {
+  const logoSvg =
+    'data:image/svg+xml;utf8,' +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#0f172a"/><text x="50%" y="54%" text-anchor="middle" font-size="26" fill="#fff" font-family="Arial, sans-serif">PLG</text></svg>',
+    );
+
+  const itemsRows = invoice.items
+    .map(
+      (item: any) => `
+      <tr>
+        <td>${item.label}</td>
+        <td class="right">${item.quantity}</td>
+        <td class="right">${formatMoney(Number(item.unitPrice))}</td>
+        <td class="right">${formatMoney(Number(item.lineTotal))}</td>
+        <td class="right">${formatMoney(Number(item.taxAmount ?? 0))}</td>
+      </tr>
+    `,
+    )
+    .join('');
+
+  const balanceDue = Math.max(0, Number(invoice.total) - paidAmount);
+
+  return `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: Arial, sans-serif; color: #0f172a; margin: 0; }
+    .container { padding: 24px 28px; }
+    .header { display: flex; justify-content: space-between; align-items: center; }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo img { width: 48px; height: 48px; }
+    .title { font-size: 24px; font-weight: 700; }
+    .muted { color: #475569; font-size: 12px; }
+    .section { margin-top: 20px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 8px 6px; border-bottom: 1px solid #e2e8f0; font-size: 12px; }
+    th { background: #f8fafc; text-align: left; }
+    .right { text-align: right; }
+    .totals { width: 100%; margin-top: 12px; }
+    .totals td { padding: 4px 6px; }
+    .highlight { font-weight: 700; }
+    .footer { margin-top: 28px; font-size: 10px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">
+        <img src="${tenant?.logoUrl ?? logoSvg}" alt="logo" />
+        <div>
+          <div class="title">${tenant?.name ?? 'Entreprise'}</div>
+          <div class="muted">${tenant?.email ?? ''} ${tenant?.phone ? '• ' + tenant.phone : ''}</div>
+        </div>
+      </div>
+      <div>
+        <div class="title">Facture</div>
+        <div class="muted">N° ${invoice.number}</div>
+      </div>
+    </div>
+
+    <div class="section grid">
+      <div>
+        <div class="muted">Facturé à</div>
+        <div class="highlight">${invoice.client?.name ?? '-'}</div>
+        <div class="muted">${invoice.client?.email ?? ''}</div>
+        <div class="muted">${invoice.client?.phone ?? ''}</div>
+        <div class="muted">${invoice.client?.address ?? ''}</div>
+      </div>
+      <div>
+        <div class="muted">Détails</div>
+        <div>Date facture: ${formatDate(invoice.invoiceDate)}</div>
+        <div>Échéance: ${formatDate(invoice.dueDate)}</div>
+        <div>Mode de paiement: ${invoice.paymentMethod ?? '-'}</div>
+        <div>Status: ${invoice.status ?? '-'}</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <table>
+        <thead>
+          <tr>
+            <th>Article</th>
+            <th class="right">Qté</th>
+            <th class="right">Prix</th>
+            <th class="right">Total HT</th>
+            <th class="right">TVA</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsRows}
+        </tbody>
+      </table>
+
+      <table class="totals">
+        <tr>
+          <td class="right">Sous-total</td>
+          <td class="right">${formatMoney(Number(invoice.subtotal))}</td>
+        </tr>
+        <tr>
+          <td class="right">TVA</td>
+          <td class="right">${formatMoney(Number(invoice.taxAmount))}</td>
+        </tr>
+        <tr class="highlight">
+          <td class="right">Total</td>
+          <td class="right">${formatMoney(Number(invoice.total))}</td>
+        </tr>
+        <tr>
+          <td class="right">Montant payé</td>
+          <td class="right">${formatMoney(paidAmount)}</td>
+        </tr>
+        <tr class="highlight">
+          <td class="right">Reste à payer</td>
+          <td class="right">${formatMoney(balanceDue)}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="section">
+      <div class="muted">Note</div>
+      <div>${invoice.note ?? '-'}</div>
+    </div>
+
+    <div class="footer">
+      ${tenant?.legalMentions ?? ''}
+    </div>
+  </div>
+</body>
+</html>
+`;
+};
