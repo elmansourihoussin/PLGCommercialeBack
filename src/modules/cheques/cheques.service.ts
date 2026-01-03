@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PlanLimitsService } from '../../common/limits/plan-limits.service';
 import { NotificationType } from '@prisma/client';
 import { buildPaginationMeta, normalizePagination } from '../../common/pagination/pagination';
 import { ListChequesQueryDto } from './dto/list-cheques.query';
@@ -12,6 +13,7 @@ export class ChequesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly limits: PlanLimitsService,
   ) {}
 
   async list(tenantId: string, query: ListChequesQueryDto) {
@@ -42,6 +44,7 @@ export class ChequesService {
   }
 
   async create(tenantId: string, dto: CreateChequeDto) {
+    await this.limits.assertCanCreate(tenantId, 'cheques');
     if (dto.clientId) {
       await this.ensureClient(tenantId, dto.clientId);
     }

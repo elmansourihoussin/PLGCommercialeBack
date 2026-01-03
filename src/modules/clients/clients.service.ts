@@ -5,10 +5,14 @@ import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { ListClientsQueryDto } from './dto/list-clients.query';
 import { buildPaginationMeta, normalizePagination } from '../../common/pagination/pagination';
+import { PlanLimitsService } from '../../common/limits/plan-limits.service';
 
 @Injectable()
 export class ClientsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly limits: PlanLimitsService,
+  ) {}
 
   async list(tenantId: string, query: ListClientsQueryDto) {
     const { page, limit, skip, take } = normalizePagination(query);
@@ -49,6 +53,7 @@ export class ClientsService {
   }
 
   async create(tenantId: string, dto: CreateClientDto) {
+    await this.limits.assertCanCreate(tenantId, 'clients');
     return this.prisma.client.create({
       data: {
         tenantId,

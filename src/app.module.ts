@@ -14,12 +14,14 @@ import { ArticlesModule } from './modules/articles/articles.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PlatformModule } from './modules/platform/platform.module';
+import { PlanLimitsModule } from './common/limits/plan-limits.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    PlanLimitsModule,
     AuthModule,
     TenantsModule,
     UsersModule,

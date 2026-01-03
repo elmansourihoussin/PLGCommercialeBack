@@ -12,6 +12,7 @@ import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ListInvoicesQueryDto } from './dto/list-invoices.query';
 import { CreateInvoicePaymentDto } from './dto/create-invoice-payment.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PlanLimitsService } from '../../common/limits/plan-limits.service';
 import puppeteer from 'puppeteer';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly limits: PlanLimitsService,
   ) {}
 
   async list(tenantId: string, query: ListInvoicesQueryDto) {
@@ -78,6 +80,7 @@ export class InvoicesService {
   }
 
   async create(tenantId: string, dto: CreateInvoiceDto) {
+    await this.limits.assertCanCreate(tenantId, 'invoices');
     if (dto.clientId) {
       await this.ensureClient(tenantId, dto.clientId);
     }

@@ -11,6 +11,7 @@ import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { ListQuotesQueryDto } from './dto/list-quotes.query';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PlanLimitsService } from '../../common/limits/plan-limits.service';
 import { NotificationType } from '@prisma/client';
 
 @Injectable()
@@ -18,6 +19,7 @@ export class QuotesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly limits: PlanLimitsService,
   ) {}
 
   async list(tenantId: string, query: ListQuotesQueryDto) {
@@ -61,6 +63,7 @@ export class QuotesService {
   }
 
   async create(tenantId: string, dto: CreateQuoteDto) {
+    await this.limits.assertCanCreate(tenantId, 'quotes');
     if (dto.clientId) {
       await this.ensureClient(tenantId, dto.clientId);
     }

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { PlanLimitsService } from '../../common/limits/plan-limits.service';
 import { buildPaginationMeta, normalizePagination } from '../../common/pagination/pagination';
 import { CreateArticleDto } from './dto/create-article.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
@@ -8,7 +9,10 @@ import { ListArticlesQueryDto } from './dto/list-articles.query';
 
 @Injectable()
 export class ArticlesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly limits: PlanLimitsService,
+  ) {}
 
   async list(tenantId: string, query: ListArticlesQueryDto) {
     const { page, limit, skip, take } = normalizePagination(query);
@@ -42,6 +46,7 @@ export class ArticlesService {
   }
 
   async create(tenantId: string, dto: CreateArticleDto) {
+    await this.limits.assertCanCreate(tenantId, 'articles');
     return this.prisma.article.create({
       data: {
         tenantId,
