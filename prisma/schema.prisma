@@ -33,6 +33,7 @@ enum NotificationType {
   QUOTE_ACCEPTED
   QUOTE_REJECTED
   QUOTE_EXPIRED
+  QUOTE_CONVERTED
   STOCK_LOW
   CHEQUE_DUE
   CHEQUE_CASHED
@@ -79,15 +80,35 @@ model User {
   role                   UserRole
   isActive               Boolean   @default(true)
   refreshTokenHash       String?
+  refreshTokenMaxExpiresAt DateTime?
   passwordResetToken     String?
   passwordResetExpiresAt DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
   deletedAt              DateTime?
 
+  sessions               Session[]
+
   notifications          Notification[]
 
   @@index([tenantId])
+}
+
+model Session {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  refreshTokenHash String
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastUsedAt       DateTime?
+  ip               String?
+  userAgent        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model PlatformUser {

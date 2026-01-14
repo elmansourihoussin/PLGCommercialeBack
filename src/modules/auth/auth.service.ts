@@ -24,12 +24,18 @@ interface TokenPayload {
   email: string;
 }
 
+interface RefreshPayload {
+  sub: string;
+  sid: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly jwtSecret: string;
   private readonly refreshSecret: string;
   private readonly accessTokenTtl: StringValue | number;
   private readonly refreshTokenTtl: StringValue | number;
+  private readonly refreshMaxDays: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -46,9 +52,10 @@ export class AuthService {
       'JWT_REFRESH_EXPIRES_IN',
       '7d',
     ) as StringValue;
+    this.refreshMaxDays = Number(configService.get('JWT_REFRESH_MAX_DAYS', 7));
   }
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, ip?: string, userAgent?: string) {
     const userEmail = dto.email ?? dto.companyEmail;
     const existing = await this.prisma.user.findUnique({
       where: { email: userEmail },
@@ -106,12 +113,19 @@ export class AuthService {
       return { tenant, user };
     });
 
-    const tokens = await this.issueTokens(result.user);
+    const maxExpiresAt = this.getMaxRefreshExpiry();
+    const session = await this.createSession(
+      result.user.id,
+      maxExpiresAt,
+      ip,
+      userAgent,
+    );
+    const tokens = await this.issueTokens(result.user, session.id, maxExpiresAt);
 
     return { user: result.user, tenant: result.tenant, ...tokens };
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, ip?: string, userAgent?: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -125,14 +139,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const tokens = await this.issueTokens(user);
+    const maxExpiresAt = this.getMaxRefreshExpiry();
+    const session = await this.createSession(user.id, maxExpiresAt, ip, userAgent);
+    const tokens = await this.issueTokens(user, session.id, maxExpiresAt);
     return { user: this.sanitizeUser(user), ...tokens };
   }
 
-  async refresh(dto: RefreshDto) {
-    let payload: TokenPayload;
+  async refresh(dto: RefreshDto, ip?: string, userAgent?: string) {
+    let payload: RefreshPayload;
     try {
-      payload = await this.jwtService.verifyAsync<TokenPayload>(
+      payload = await this.jwtService.verifyAsync<RefreshPayload>(
         dto.refreshToken,
         { secret: this.refreshSecret },
       );
@@ -140,28 +156,44 @@ export class AuthService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+    const session = await this.prisma.session.findUnique({
+      where: { id: payload.sid },
+      include: { user: true },
     });
 
-    if (!user || !user.refreshTokenHash) {
+    if (!session || session.revokedAt) {
       throw new UnauthorizedException('Refresh token revoked');
     }
 
-    const isValid = await bcrypt.compare(dto.refreshToken, user.refreshTokenHash);
-    if (!isValid) {
-      throw new UnauthorizedException('Refresh token mismatch');
+    if (session.expiresAt.getTime() <= Date.now()) {
+      throw new UnauthorizedException('Refresh session expired');
     }
 
-    const tokens = await this.issueTokens(user);
-    return { user: this.sanitizeUser(user), ...tokens };
+    const isValid = await bcrypt.compare(
+      dto.refreshToken,
+      session.refreshTokenHash,
+    );
+    if (!isValid) {
+      await this.revokeAllSessions(session.userId);
+      throw new UnauthorizedException('Refresh token reuse detected');
+    }
+
+    const tokens = await this.issueTokens(
+      session.user,
+      session.id,
+      session.expiresAt,
+      ip,
+      userAgent,
+    );
+    return { user: this.sanitizeUser(session.user), ...tokens };
   }
 
   async logout(userId: string) {
     await this.prisma.user.update({
       where: { id: userId },
-      data: { refreshTokenHash: null },
+      data: { refreshTokenHash: null, refreshTokenMaxExpiresAt: null },
     });
+    await this.revokeAllSessions(userId);
 
     return { success: true };
   }
@@ -219,12 +251,18 @@ export class AuthService {
     return { success: true };
   }
 
-  private async issueTokens(user: {
-    id: string;
-    tenantId: string;
-    role: Role;
-    email: string;
-  }) {
+  private async issueTokens(
+    user: {
+      id: string;
+      tenantId: string;
+      role: Role;
+      email: string;
+    },
+    sessionId: string,
+    maxExpiresAt?: Date,
+    ip?: string,
+    userAgent?: string,
+  ) {
     const payload: TokenPayload = {
       sub: user.id,
       tenantId: user.tenantId,
@@ -232,25 +270,71 @@ export class AuthService {
       email: user.email,
     };
 
+    const refreshExpiresIn =
+      maxExpiresAt !== undefined
+        ? Math.max(1, Math.floor((maxExpiresAt.getTime() - Date.now()) / 1000))
+        : this.refreshTokenTtl;
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.jwtSecret,
         expiresIn: this.accessTokenTtl,
       }),
-      this.jwtService.signAsync(payload, {
-        secret: this.refreshSecret,
-        expiresIn: this.refreshTokenTtl,
-      }),
+      this.jwtService.signAsync(
+        { sub: user.id, sid: sessionId },
+        {
+          secret: this.refreshSecret,
+          expiresIn: refreshExpiresIn,
+        },
+      ),
     ]);
 
     const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { refreshTokenHash },
+    await this.prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        refreshTokenHash,
+        expiresAt: maxExpiresAt ?? this.getMaxRefreshExpiry(),
+        lastUsedAt: new Date(),
+        ip,
+        userAgent,
+      },
     });
 
     return { accessToken, refreshToken };
+  }
+
+  private getMaxRefreshExpiry() {
+    const days = Number.isFinite(this.refreshMaxDays) && this.refreshMaxDays > 0
+      ? this.refreshMaxDays
+      : 7;
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  }
+
+  private async createSession(
+    userId: string,
+    expiresAt: Date,
+    ip?: string,
+    userAgent?: string,
+  ) {
+    const hash = await bcrypt.hash(randomBytes(32).toString('hex'), 10);
+    return this.prisma.session.create({
+      data: {
+        userId,
+        refreshTokenHash: hash,
+        expiresAt,
+        ip,
+        userAgent,
+      },
+    });
+  }
+
+  private async revokeAllSessions(userId: string) {
+    await this.prisma.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 
   private sanitizeUser(user: {

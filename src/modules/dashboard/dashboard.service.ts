@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { RevenueByMonthQueryDto } from './dto/revenue-by-month.query';
 
 @Injectable()
 export class DashboardService {
@@ -43,6 +45,39 @@ export class DashboardService {
         },
         {},
       ),
+    };
+  }
+
+  async revenueByMonth(tenantId: string, query: RevenueByMonthQueryDto) {
+    const year = query.year ?? new Date().getFullYear();
+    const start = new Date(year, 0, 1);
+    const end = new Date(year + 1, 0, 1);
+
+    const rows = await this.prisma.$queryRaw<
+      { month: number; total: Prisma.Decimal }[]
+    >(Prisma.sql`
+      SELECT
+        EXTRACT(MONTH FROM COALESCE("paidAt", "createdAt"))::int AS month,
+        SUM(amount) AS total
+      FROM "InvoicePayment"
+      WHERE "tenantId" = ${tenantId}
+        AND COALESCE("paidAt", "createdAt") >= ${start}
+        AND COALESCE("paidAt", "createdAt") < ${end}
+      GROUP BY 1
+      ORDER BY 1
+    `);
+
+    const totalsByMonth = new Map<number, number>();
+    for (const row of rows) {
+      totalsByMonth.set(row.month, Number(row.total ?? 0));
+    }
+
+    return {
+      year,
+      data: Array.from({ length: 12 }, (_, index) => {
+        const month = index + 1;
+        return { month, total: totalsByMonth.get(month) ?? 0 };
+      }),
     };
   }
 }
