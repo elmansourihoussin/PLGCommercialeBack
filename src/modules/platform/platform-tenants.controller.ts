@@ -28,6 +28,11 @@ export class PlatformTenantsController {
     return this.tenantsService.create(dto);
   }
 
+  @Get('stats')
+  stats() {
+    return this.tenantsService.stats();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.tenantsService.findOne(id);

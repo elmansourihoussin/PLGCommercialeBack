@@ -126,4 +126,27 @@ export class PlatformTenantsService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  async stats() {
+    const [totalCompanies, activeCompanies, freeCompanies, proCompanies] =
+      await Promise.all([
+        this.prisma.tenant.count({ where: { deletedAt: null } }),
+        this.prisma.tenant.count({
+          where: { deletedAt: null, isActive: true },
+        }),
+        this.prisma.billingSubscription.count({
+          where: { plan: 'FREE', tenant: { deletedAt: null } },
+        }),
+        this.prisma.billingSubscription.count({
+          where: { plan: 'PRO', tenant: { deletedAt: null } },
+        }),
+      ]);
+
+    return {
+      totalCompanies,
+      activeCompanies,
+      freeCompanies,
+      proCompanies,
+    };
+  }
 }
