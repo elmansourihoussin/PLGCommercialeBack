@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
@@ -22,6 +22,26 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
       forbidUnknownValues: false,
+      exceptionFactory: (errors) => {
+        const messages: string[] = [];
+        const walk = (errs: typeof errors, parentPath = '') => {
+          errs.forEach((err) => {
+            const path = parentPath
+              ? `${parentPath}.${err.property}`
+              : err.property;
+            if (err.constraints) {
+              Object.entries(err.constraints).forEach(([key, message]) => {
+                messages.push(`${path}: ${mapConstraint(key, message)}`);
+              });
+            }
+            if (err.children?.length) {
+              walk(err.children, path);
+            }
+          });
+        };
+        walk(errors);
+        return new BadRequestException({ message: messages });
+      },
     }),
   );
   app.useGlobalFilters(new HttpExceptionFilter());
@@ -42,3 +62,32 @@ async function bootstrap() {
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
+
+const mapConstraint = (key: string, message: string) => {
+  switch (key) {
+    case 'isNotEmpty':
+      return 'ce champ est obligatoire';
+    case 'isEmail':
+      return 'email invalide';
+    case 'isString':
+      return 'doit etre une chaine de caracteres';
+    case 'isBoolean':
+      return 'doit etre vrai ou faux';
+    case 'isNumber':
+      return 'doit etre un nombre';
+    case 'isDateString':
+      return 'date invalide';
+    case 'isEnum':
+      return 'valeur invalide';
+    case 'minLength': {
+      const match = message.match(/(\\d+)/);
+      return `doit contenir au moins ${match?.[1] ?? 'N'} caracteres`;
+    }
+    case 'min': {
+      const match = message.match(/(-?\\d+\\.?\\d*)/);
+      return `doit etre >= ${match?.[1] ?? 'N'}`;
+    }
+    default:
+      return message;
+  }
+};
