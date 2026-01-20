@@ -1,19 +1,14 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { PlatformJwtGuard } from './guards/platform-jwt.guard';
-import { PlatformRolesGuard } from './guards/platform-roles.guard';
-import { PlatformRoles } from './guards/platform-roles.decorator';
-import { PlatformRole } from '@prisma/client';
 import { PlatformTenantsService } from './platform-tenants.service';
 import { ListTenantsQueryDto } from './dto/list-tenants.query';
 import { UpdateTenantStatusDto } from './dto/update-tenant-status.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantSubscriptionDto } from './dto/update-tenant-subscription.dto';
+import { ApiKeyGuard } from '../../common/guards/api-key.guard';
 
 @ApiTags('Platform Tenants')
-@ApiBearerAuth()
-@UseGuards(PlatformJwtGuard, PlatformRolesGuard)
-@PlatformRoles(PlatformRole.ROOT, PlatformRole.ADMIN)
+@UseGuards(ApiKeyGuard)
 @Controller('platform/tenants')
 export class PlatformTenantsController {
   constructor(private readonly tenantsService: PlatformTenantsService) {}
