@@ -5,10 +5,11 @@ import { ListTenantsQueryDto } from './dto/list-tenants.query';
 import { UpdateTenantStatusDto } from './dto/update-tenant-status.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantSubscriptionDto } from './dto/update-tenant-subscription.dto';
-import { ApiKeyGuard } from '../../common/guards/api-key.guard';
+import { PlatformJwtGuard } from './guards/platform-jwt.guard';
 
 @ApiTags('Platform Tenants')
-@UseGuards(ApiKeyGuard)
+@ApiBearerAuth()
+@UseGuards(PlatformJwtGuard)
 @Controller('platform/tenants')
 export class PlatformTenantsController {
   constructor(private readonly tenantsService: PlatformTenantsService) {}
