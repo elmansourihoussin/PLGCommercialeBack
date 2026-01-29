@@ -31,6 +31,18 @@
 $ npm install
 ```
 
+## Configuration
+
+Environment variables for uploads (optional):
+
+```bash
+# Where files are stored on disk (absolute or relative to project root)
+UPLOADS_DIR=./storage/uploads
+
+# Public URL base used to serve uploaded files
+UPLOADS_URL_BASE=/static
+```
+
 ## Compile and run the project
 
 ```bash
