@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { formatSequenceNumber } from '../../common/utils/numbering';
 import { buildPaginationMeta, normalizePagination } from '../../common/pagination/pagination';
+import { withBaseUrl } from '../../common/utils/url';
 import { CreateQuoteDto } from './dto/create-quote.dto';
 import { UpdateQuoteDto } from './dto/update-quote.dto';
 import { ListQuotesQueryDto } from './dto/list-quotes.query';
@@ -296,7 +297,10 @@ export class QuotesService {
       where: { id: tenantId, deletedAt: null },
     });
 
-    const html = buildQuoteHtml({ quote, tenant });
+    const tenantForPdf = tenant
+      ? { ...tenant, logoUrl: withBaseUrl(tenant.logoUrl) }
+      : tenant;
+    const html = buildQuoteHtml({ quote, tenant: tenantForPdf });
 
     const browser = await puppeteer.launch({
       headless: true,
@@ -453,11 +457,9 @@ const buildQuoteHtml = ({
   quote: any;
   tenant: any;
 }) => {
-  const logoSvg =
-    'data:image/svg+xml;utf8,' +
-    encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#0f172a"/><text x="50%" y="54%" text-anchor="middle" font-size="26" fill="#fff" font-family="Arial, sans-serif">PLG</text></svg>',
-    );
+  const logoImg = tenant?.logoUrl
+    ? `<img src="${tenant.logoUrl}" alt="logo" />`
+    : '';
 
   const itemsRows = quote.items
     .map(
@@ -502,7 +504,7 @@ const buildQuoteHtml = ({
   <div class="container">
     <div class="header">
       <div class="logo">
-        <img src="${tenant?.logoUrl ?? logoSvg}" alt="logo" />
+        ${logoImg}
         <div>
           <div class="title">${tenant?.name ?? 'Entreprise'}</div>
           <div class="muted">${tenant?.email ?? ''} ${tenant?.phone ? '• ' + tenant.phone : ''}</div>

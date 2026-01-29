@@ -41,6 +41,9 @@ UPLOADS_DIR=./storage/uploads
 
 # Public URL base used to serve uploaded files
 UPLOADS_URL_BASE=/static
+
+# Base URL of the API (used to build absolute logo URLs in PDFs)
+APP_BASE_URL=http://localhost:3000
 ```
 
 ## Compile and run the project
